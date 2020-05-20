@@ -1,0 +1,1 @@
+PSCP.exe E:\first_03\º¿\recodingbot.py pi@192.168.0.6:/home/pi/bot/

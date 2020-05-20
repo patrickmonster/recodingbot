@@ -1,0 +1,1 @@
+PSCP.exe -r pi@192.168.0.6:/home/pi/first_7 E:\first_03\º¿\

@@ -1,6 +1,7 @@
 const tmi = require('tmi.js');
 const request = require('sync-request');
 const fs = require('fs');
+var config = require('./dbconfig');
 
 !fs.existsSync("logger") && fs.mkdirSync("logger");
 !fs.existsSync("users") && fs.mkdirSync("users");
@@ -10,6 +11,7 @@ const log = require('simple-node-logger').createRollingFileLogger({
     fileNamePattern:'bot<DATE>.log',
     dateFormat:'YYYY.MM.DD'
 });
+const senter_user = config.botOptions.username;
 
 const opts = {
   connection: {
@@ -17,12 +19,10 @@ const opts = {
 		secure: true
 	},
   identity: {
-    username: "recodingbot",
-    password: "oauth:q4nxdhnv8gxnpg4r6dl02deeubabnz"
+    username: config.botOptions.username,//"recodingbot",
+    password: config.botOptions.password//"oauth:q4nxdhnv8gxnpg4r6dl02deeubabnz"
   },
-  channels: [
-    "recodingbot"
-  ]
+  channels: [senter_user]
 };
 function Stack(size=0){
   this.data = [];
@@ -39,7 +39,8 @@ function Stack(size=0){
 
 var ChatBot = {
   message:{"noneStream":"오프라인!","runStream":"방송중!","errAdd":"올바르지 않은 문장입니다!","followsUser":"팔로우한지 ","followsNo":"팔로우하지 않았습니다!",
-    "helpAdd":"!추가 [word] [message or commands - {user}/{id}/{channel}/\\n]","helpBadWord":"!금지어 [word] [message or commands - ban/timeout/delete/\\n]"
+    "helpAdd":"!추가 [word] [message or commands - {user}/{id}/{channel}/\\n]","helpBadWord":"!금지어 [word] [message or commands - ban/timeout/delete/\\n]",
+    "helpClear":"!clear [ban or message]"
   },time:["초","분","시","일","년"],
   commands:{},chats:{},users:{},stream:{},
   onConnectedHandler:function(addr, port){
@@ -54,195 +55,148 @@ var ChatBot = {
   },onMessageHandler:function(target, context, msg, self) {
     if (self) { return; }
     const commandName = msg.trim().split(" ");//공백제거
-    if(!ChatBot.chats.hasOwnProperty(target))
-      ChatBot.chats[target] = new Stack(500);
-    switch (commandName[0]) {
-      case '!유저':case '!user':
-        if(target!="#recodingbot")return;
-        client.say(target,`${Object.keys(ChatBot.commands).length}명 온라인`);
-        break;
-      case '!방송':case '!stream':
-        if(target=="#recodingbot")return;
-        client.say(target,ChatBot.getStreamStarted(target));
-        break;
-      case '!레봇':case '!recodingbot':case '!rb':
-        client.say(target,`현재${target.substr(1)}님 채팅 서버에서 가동중입니다! 주로 채팅을 제어하거나 필터링 및 모니터링 합니다! - 기타문의 : 쪽지`);
-        break;
-      //////////////////////////////////////////////////////////////////////////
-      case '!명령어':case '!commands':
-        var out = (commandName[0]=='!commands'?
-            ['!stream','!recodingbot','!commands','!follows','!add','!viewbot']:
-            ['!방송','!레봇','!명령어','!팔로우','!추가','!뷰봇']
-          ).join(",");
-        if(target=="#recodingbot")
-          out = ['!레봇','!입장','!퇴장'].join(",");
-        if(ChatBot.commands.hasOwnProperty(target.substr(1)) && ChatBot.commands[target.substr(1)].auto)
-          out+=Object.keys(ChatBot.commands[target.substr(1)].auto).join(",");
-        client.say(target,"/me " + out);
-        break;[]
-      case '!팔로우': case '!follows':
-        if(target=="#recodingbot")return;
-        client.say(target,ChatBot.getFollow(target,context['user-id']));
-        break;
-      case '!종료': case '!end': case '!저장': case '!save':
-        if(target!="#recodingbot")return;
-        for(var i in ChatBot.commands){
-            if(i=="recodingbot")continue;
-            if(commandName[0]!='!save' && commandName[0]!='!저장')
-              client.say(`#${i}`,commandName.length > 1?`/me ${commandName.slice(1).join(" ")}`:`/me ${i}채널에서 퇴장합니다(시스템 리부트)`);
-            console.log(`제거 #${i}`);
-            ChatBot.loadUser(i);
-            client.ws.send(`PART #${user}`);
-        }
-        if(commandName[0]=='!save' || commandName[0]=='!저장'){
-          client.say(`#recodingbot`,`/me 시스템 현재상태가 저장됨`);
+    if(target!=`#${senter_user}`){//레봇채널
+      switch (commandName[0]){
+        case '!유저':case '!user':
+           client.say(target,`${Object.keys(ChatBot.commands).length}명 온라인`);
+           break;
+        case '!recodingbot':case '!봇':
+          client.say(target,`현재${target.substr(1)}채널을 중점으로 동작중입니다! - 기타문의 : 쪽지`);
           break;
-        }
-        client.say(`#recodingbot`,commandName.length > 1?`/me ${commandName.slice(1).join(" ")}`:`/me ${target}채널에서 퇴장합니다(시스템 리부트)`);
-        console.log(commandName.length > 1?`${commandName.slice(1).join(" ")}`:`채널에서 퇴장합니다(시스템 리부트)`);
-        log.info(target,commandName.length > 1?`${commandName.slice(1).join(" ")}`:`채널에서 퇴장합니다(시스템 리부트)`);
-        console.log(Object.keys(ChatBot.commands).length+"명 온라인");
-        fs.writeFileSync("users/recodingbot.config",JSON.stringify(Object.keys(ChatBot.commands)),"utf8");
-        client.disconnect().catch(console.error);
-        setTimeout(_=>{process.exit()},10*1000);
-        break;
-      case '!퇴장': case '!exit':
-        var user = target!="#recodingbot" ? target.substr(1) : context.username;
-        if(!context.mod && context.username != target.substr(1))return;
-        if(target!="#recodingbot"){
-          if(commandName.length <= 1)return;//명령없음
-          user=commandName[1];
-        }
-        if(!ChatBot.commands.hasOwnProperty(user))return;
-        client.say("#"+user,`/me ${user}채널에서 퇴장합니다`);
-        console.log(`제거 #${user}`);
-        log.info(target,`${context['display-name']}(${context['username']}) 채널에서 퇴장함 - [${context['user-id']} ${user}]`);
-        ChatBot.loadUser(user);
-        delete ChatBot.commands[user];
-        client.ws.send(`PART #${user}`);
-        break;
-      case '!입장': case '!join':
-        if(target!="#recodingbot")break;
-        if(context.username == "recodingbot"){
-          if(commandName.length >= 2){
-            client.ws.send(`JOIN #${commandName[1]}`);
-            client.say(target,`/me ${commandName[1]}채널에 입장시켰습니다!`);
-            client.say(`#${commandName[1]}`,`/me ${commandName[1]}채널에 입장하였습니다!`);
-            ChatBot.getStreamData(commandName[1]);
-            ChatBot.loadUser(commandName[1],false);
-            console.log(`추가 #${commandName[1]}`);
-            log.info(target,context['username'],context['user-id'],context['display-name'],`추가 #${context.username}`);
+        case '!입장':case '!join':
+          var user = commandName[1] || context.username;
+          if(ChatBot.commands.hasOwnProperty(target)){
+            client.say(target,'이미 입장하였습니다!');
             break;
+          }
+          client.ws.send(`JOIN #${user}`);
+          client.say(target,`/me ${user}채널에 입장시켰습니다!`);//현재채널 알림
+          client.say(`#${user}`,`/me 봇이 채널에 입장하였습니다!`);//입장채널 알림
+          ChatBot.getStreamData(user);ChatBot.loadUser(user,false);// 데이터 로드
+          log.info(target,context['username'],context['user-id'],context['display-name'],`추가 #${user}`);
+        case '!퇴장': case '!exit':// 관리자만 명령
+          if((!context.mod && context.username != target.substr(1)))return;//관리자
+          var user=commandName[1];
+          if(!ChatBot.commands.hasOwnProperty(user))return;
+          client.say(target,`/me ${target}레봇이가 채널에서 탈출합니다! 안녕~`);
+          console.log(`제거 #${user}`);
+          log.info(target,`${context['display-name']}(${context['username']}) 채널에서 퇴장함 - [${context['user-id']} ${user}]`);
+          ChatBot.loadUser(user);//데아터 저장
+          delete ChatBot.commands[user];//제거
+          client.ws.send(`PART #${user}`);//저장
+          break;
+        default:break;
+      }//switch
+    }else{//사용자 채널//////////////////////////////////////////////////////////
+      if(context["username"]=="recodingbot")return;
+      if(!ChatBot.chats.hasOwnProperty(target.substr(1)))
+        ChatBot.chats[target.substr(1)] = new Stack(500);
+      switch (commandName[0]) {
+       case '!방송':case '!stream'://방송시간
+         var channeldata = ChatBot.getStreamData(target);
+         if(!channeldata){
+           client.say(target,"방송중이지 않아! 정보를 불러올 수 없습니다!");
+           break;
+         }
+         if(typeof channeldata == 'string') client.say(target,channeldata);
+         else client.say(target,`${channeldata.channel.game} (${channeldata.channel.followers}): ${channeldata.channel.status}`);
+         break;//`#${senter_user}`
+       case '!팔로우': case '!follows'://///////////////////////////////////////
+         client.say(target,ChatBot.getFollow(target,context['user-id']));
+         break;
+       case '!업타임': case '!uptime':// 스트리밍 정보
+         client.say(target,ChatBot.getStreamStarted(target));
+         break;
+       case '!레봇':case '!recodingbot':case '!rb':
+         client.say(target,`현재${target.substr(1)}님 채팅 서버에서 가동중입니다! 주로 채팅을 제어하거나 필터링 및 모니터링 합니다! - 기타문의 : 쪽지`);
+         break;
+        case '!퇴장': case '!exit':// 채널에서 퇴장
+          if((!context.mod && context.username != target.substr(1)))return;
+          client.say(target,`/me 레봇이가 채널에서 탈출합니다! 안녕~`);
+          log.info(target,`${context['display-name']}(${context['username']}) 채널에서 퇴장함 - [${context['user-id']} ${target.substr(1)}]`);
+          ChatBot.loadUser(target);//데아터 저장
+          delete ChatBot.commands[target.substr(1)];//제거
+          client.ws.send(`PART ${target}`);//저장
+          break;
+        case '!명령어':case '!commands':// 명령어
+          var out = (commandName[0]=='!commands'?
+              ['!stream','!follows','!uptime','!recodingbot','!add','!del','!clear']:
+              ['!방송','!업타임','!레봇','!팔로우','!명령어','!추가','!제거','!클리어']
+            ).join(",");
+          if(ChatBot.commands.hasOwnProperty(target.substr(1)) && ChatBot.commands[target.substr(1)].auto)
+            out+=Object.keys(ChatBot.commands[target.substr(1)].auto).join(",");
+          client.say(target,"/me " + out);
+          break;
+        case '!추가': case '!add':
+          if(!context.mod && context.username != target.substr(1))return;
+          if(commandName.length < 2 || commandName[1].length ==0 || commandName[2].length ==0){//
+            client.say(target,ChatBot.message.helpAdd);
           }else{
-            client.say(target,`/me ${commandName[0]} [입장할채널]`);
-            break;
+            ChatBot.commands[target.substr(1)].auto[commandName[1]] = commandName.length > 3?commandName.slice(2).join(" "):commandName[2];
+            client.say(target,`명령이 추가됨! ${commandName[1]}`);
           }
-        }
-        client.ws.send(`JOIN #${context.username}`);
-        client.say(target,`/me ${context.username}채널에 입장시켰습니다!`);
-        client.say(`#${context.username}`,`/me ${context.username}채널에 입장하였습니다!`);
-        ChatBot.getStreamData(context.username);
-        ChatBot.loadUser(context.username,false);
-        console.log(`추가 #${context.username}`);
-        log.info(target,context['username'],context['user-id'],context['display-name'],`추가 #${context.username}`);
-        break;
-      case '!추가': case '!add': case '!금지어': case '!badword':
-        if(target=="#recodingbot")return;
-        if(!context.mod && context.username != target.substr(1))return;
-        if(commandName.length < 2){//
-          client.say(target,(commandName[0]=='!추가'||commandName[0]=='!add')?ChatBot.message.helpAdd:ChatBot.message.helpBadWord);
-        }else{
-          var t = (commandName[0]=='!추가'||commandName[0]=='!add')?'auto':'words';
-          ChatBot.commands[target.substr(1)][t][commandName[1]] = commandName.length > 3 ? commandName.slice(2).join(" "):commandName[2];
-          console.log(commandName.slice(2).join(" "),commandName[1]);
-          client.say(target,`/me 명령이 추가됨! ${commandName[1]}`);
-        }
-        break;
-      case '!제거': case '!del':
-        if(target=="#recodingbot")break;
-        if(!context.mod && context.username != target.substr(1))break;
-        if(commandName.length <= 1){
-          client.say(target,ChatBot.message.errAdd);
-        }else{
-          if(!ChatBot.command[target.substr(1)].auto.hasOwnProperty(commandName[1])){
-            if(!ChatBot.command[target.substr(1)].words.hasOwnProperty(commandName[1])){
-              client.say(target,`/me 명령이 없습니다!`);return;
-            }
-            ChatBot.commands[target.substr(1)].words[commandName[1]] = '';
-            delete ChatBot.commands[target.substr(1)].words[commandName[1]]
-            client.say(target,`/me 금지어가 제거됨! ${commandName[1]}`);
-            break;
-          }
-          ChatBot.commands[target.substr(1)].auto[commandName[1]] = '';
-          delete ChatBot.commands[target.substr(1)].auto[commandName[1]]
-          client.say(target,`/me 명령이 제거됨! ${commandName[1]}`);
-        }
-        break;
-      case '!정보':
-        if(context["username"]!='neocats_')break;
-        var channeldata = ChatBot.getStreamData(target);
-        if(!channeldata){
-          client.say(target,"방송중이지 않아! 정보를 불러올 수 없습니다!");
           break;
-        }
-        if(typeof channeldata == 'string') client.say(target,channeldata);
-        else client.say(target,`${channeldata.channel.game} (${channeldata.channel.followers})]${channeldata.channel.status} `);
-        break;
-      case '!뷰봇': case '!viewbot':
-        if(target=="#recodingbot")return;
-        if(!context.mod && context.username != target.substr(1))return;
-        if(commandName.length < 2){
-          client.say(target,"최근 채팅중, 불건전한 채팅을 검색하여 모두 벤 하는 기능입니다 [!뷰봇 검색채팅]");
-        }else{
-          chats = ChatBot.chats[target];
-          var users=[];
-          for(var i=0;i<chats.length();i++){
-            var j = chats.get(i);
-            if(j.message.indexOf(commandName[1])==-1)continue;
-            users.push(j.username);
-            ChatBot.command(target,"ban",j.username,"you using bad program! 밴 해지가 필요하면 쪽지로 매니저에게 요청하세요~");
-          }
-          client.say(target,`/me 사용자 ${users.length}명을 벤처리 하였습니다`);
-          console.log(`${target} 사용자 ${users.length}명을 벤처리 하였습니다`);
-          log.info(target,`${target} 사용자 ${users.length}명을 벤처리 하였습니다`);
-        }
-        break;
-      default://////////////////////////////////////////////////////////////////
-        if(target=="#recodingbot")break;
-        ChatBot.chats[target].push({
-          'display-name':context['display-name'],
-          'room-id':context['room-id'],
-          'user-id':context['user-id'],
-          'username':context['username'],
-          'id':context['id'],
-          'message':msg
-        });
-        if(context["username"]=="recodingbot")break;
-        log.info(target,context['username'],context['user-id'],context['display-name'],msg);
-        var comm = ChatBot.commands[target.substr(1)].words;
-        for(var i in comm)/////////////////////////////////////////////금지어처리
-          if(msg.indexOf(i)!= -1){//전채스캔
-            var out = comm[i].replace("{user}",context['display-name']).replace("{id}",context["username"]).replace("{channel}",target.substr(1));
-            var out = out.split("\n");
-            for(var i of out){
-              var list = i.split(" ");
-              if(["ban","timeout","delete"].indexOf(list[0])==-1||list.length >= 2)
-                client.say(target,i);
-              else ChatBot.command(target,list[0],list[0]!='delete'?context["username"]:context["id"],list[1]);
+        case '!제거': case '!del':
+          if(!context.mod && context.username != target.substr(1))break;
+          if(commandName.length <= 1){
+            client.say(target,ChatBot.message.errAdd);
+          }else{
+            if(!ChatBot.command[target.substr(1)].auto.hasOwnProperty(commandName[1])){
+              client.say(target,`명령이 존재하지 않음!`);
+              break;
             }
-            break
-          }//if
-        var comm = ChatBot.commands[target.substr(1)].auto;
-        for(var i in comm)/////////////////////////////////////////////명령어처리
-          if(commandName[0].indexOf(i)!= -1){
-            var out = comm[i].replace("{user}",context['display-name']).replace("{id}",context["username"]).replace("{channel}",target.substr(1));
-            var out = out.split("\n");
-            console.log(out);
-            for(var i of out)
-              client.say(target,i);
-            break;
+            ChatBot.commands[target.substr(1)].auto[commandName[1]] = '';
+            delete ChatBot.commands[target.substr(1)].auto[commandName[1]];
+            client.say(target,`명령이 제거됨! ${commandName[1]}`);
           }
-    }//switch
+          break;
+        case '!클리어':case '!clear':
+          if(!context.mod && context.username != target.substr(1))break;
+          if(commandName.length <= 1){
+            client.say(target,ChatBot.message.helpClear);
+          }else{
+            if(!ChatBot.command[target.substr(1)].auto.hasOwnProperty(commandName[1])){
+              client.say(target,`명령이 존재하지 않음!`);
+              break;
+            }
+            var users = [];
+            var index=commandName[1]=='ban'?2:1;//0 1 2
+            var message=commandName.length>index+1?commandName.slice(index).join(" "):commandName[index];
+            for(var i of ChatBot.chats[target.substr(1)])
+              if(users.indexOf(i['username'])==-1 && i.message.indexOf(message)!=-1){
+                if(index == 2){
+                    users.append(i['username']);
+                    client.say(target,`/ban ${i['username']} 당신은 불법프로그램을 사용하여 차단당하였습니다.You were blocked for using illegal programs. Inquiries: Notes`);
+                }else
+                  client.say(target,`/delete ${context['id']}`);
+              }
+            if(users.length)
+              log.info(target,`${context['display-name']}(${context['username']}) 채널에서 퇴장 조취됨(clenner) - [${users.join(",")}]`);
+            else log.info(target,`${context['display-name']}(${context['username']}) 채널에서 메세지 제거됨(clenner) - [${message}]`);
+            client.say(target,`처리됨 :${index==2?(users.length+'명'):'메세지 제거처리'}`);
+          }
+          break;
+        default:////////////////////////////////////////////////////////////////
+          ChatBot.chats[target.substr(1)].push({
+            'display-name':context['display-name'],
+            'room-id':context['room-id'],
+            'user-id':context['user-id'],
+            'username':context['username'],
+            'id':context['id'],
+            'message':msg
+          });
+          log.info(target,context['username'],context['user-id'],context['display-name'],msg);
+          var comm = ChatBot.commands[target.substr(1)].auto;
+          for(var i in comm)/////////////////////////////////////////////명령어처리
+            if(commandName[0].indexOf(i)!= -1){
+              var out = comm[i].replace("{user}",context['display-name']).replace("{id}",context["username"]).replace("{channel}",target.substr(1)).split("\n");
+              for(var i of out)
+                client.say(target,i);
+              break;
+            }
+      }
+    }
+    return;
   },command:function(target,type,user,option){
     if(["ban","timeout","delete"].indexOf(type)==-1)
       return;

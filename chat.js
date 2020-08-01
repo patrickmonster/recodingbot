@@ -55,7 +55,7 @@ var ChatBot = {
   },onMessageHandler:function(target, context, msg, self) {
     if (self) { return; }
     const commandName = msg.trim().split(" ");//공백제거
-    if(target!=`#${senter_user}`){//레봇채널
+    if(target==`#${senter_user}`){//레봇채널
       switch (commandName[0]){
         case '!유저':case '!user':
            client.say(target,`${Object.keys(ChatBot.commands).length}명 온라인`);
@@ -78,12 +78,19 @@ var ChatBot = {
           if((!context.mod && context.username != target.substr(1)))return;//관리자
           var user=commandName[1];
           if(!ChatBot.commands.hasOwnProperty(user))return;
-          client.say(target,`/me ${target}레봇이가 채널에서 탈출합니다! 안녕~`);
-          console.log(`제거 #${user}`);
+          client.say(`#${user}`,`/me 레봇이가 채널에서 탈출합니다! 안녕~`);
           log.info(target,`${context['display-name']}(${context['username']}) 채널에서 퇴장함 - [${context['user-id']} ${user}]`);
           ChatBot.loadUser(user);//데아터 저장
           delete ChatBot.commands[user];//제거
           client.ws.send(`PART #${user}`);//저장
+          break;
+        case '!저장': case '!save':// 관리자만 명령
+          if((!context.mod && context.username != target.substr(1)))return;//관리자
+          for(var i in ChatBot.commands)
+            ChatBot.loadUser(i);
+          client.say(target,`/me 저장됨`);
+          fs.writeFileSync("users/recodingbot.config",JSON.stringify(Object.keys(ChatBot.commands)),"utf8");
+          // client.say(target,`${Object.keys().length}명 온라인`);
           break;
         default:break;
       }//switch
@@ -127,9 +134,9 @@ var ChatBot = {
             out+=Object.keys(ChatBot.commands[target.substr(1)].auto).join(",");
           client.say(target,"/me " + out);
           break;
-        case '!추가': case '!add':
+        case '!추가': case '!add'://0 1 2 //3
           if(!context.mod && context.username != target.substr(1))return;
-          if(commandName.length < 2 || commandName[1].length ==0 || commandName[2].length ==0){//
+          if(commandName.length < 3 || commandName[1].length ==0 || commandName[2].length ==0){//
             client.say(target,ChatBot.message.helpAdd);
           }else{
             ChatBot.commands[target.substr(1)].auto[commandName[1]] = commandName.length > 3?commandName.slice(2).join(" "):commandName[2];
@@ -189,7 +196,7 @@ var ChatBot = {
           var comm = ChatBot.commands[target.substr(1)].auto;
           for(var i in comm)/////////////////////////////////////////////명령어처리
             if(commandName[0].indexOf(i)!= -1){
-              var out = comm[i].replace("{user}",context['display-name']).replace("{id}",context["username"]).replace("{channel}",target.substr(1)).split("\n");
+              var out = comm[i].replace("{user}",context['display-name']).replace("{id}",context["username"]).replace("{channel}",target.substr(1)).split("@n");
               for(var i of out)
                 client.say(target,i);
               break;

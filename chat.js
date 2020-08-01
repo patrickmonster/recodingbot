@@ -95,7 +95,7 @@ var ChatBot = {
         default:break;
       }//switch
     }else{//사용자 채널//////////////////////////////////////////////////////////
-      if(context["username"]=="recodingbot")return;
+      if(context.username=="recodingbot")return;
       if(!ChatBot.chats.hasOwnProperty(target.substr(1)))
         ChatBot.chats[target.substr(1)] = new Stack(500);
       switch (commandName[0]) {
@@ -134,7 +134,7 @@ var ChatBot = {
             out+=Object.keys(ChatBot.commands[target.substr(1)].auto).join(",");
           client.say(target,"/me " + out);
           break;
-        case '!추가': case '!add'://0 1 2 //3
+        case '!추가': case '!add':
           if(!context.mod && context.username != target.substr(1))return;
           if(commandName.length < 3 || commandName[1].length ==0 || commandName[2].length ==0){//
             client.say(target,ChatBot.message.helpAdd);
@@ -148,7 +148,7 @@ var ChatBot = {
           if(commandName.length <= 1){
             client.say(target,ChatBot.message.errAdd);
           }else{
-            if(!ChatBot.command[target.substr(1)].auto.hasOwnProperty(commandName[1])){
+            if(!ChatBot.commands[target.substr(1)].auto.hasOwnProperty(commandName[1])){
               client.say(target,`명령이 존재하지 않음!`);
               break;
             }
@@ -195,8 +195,8 @@ var ChatBot = {
           log.info(target,context['username'],context['user-id'],context['display-name'],msg);
           var comm = ChatBot.commands[target.substr(1)].auto;
           for(var i in comm)/////////////////////////////////////////////명령어처리
-            if(commandName[0].indexOf(i)!= -1){
-              var out = comm[i].replace("{user}",context['display-name']).replace("{id}",context["username"]).replace("{channel}",target.substr(1)).split("@n");
+            if(comm[i][0]=="$"?msg.indexOf(i):commandName[0].indexOf(i)!= -1){
+              var out = (comm[i][0]=="$"?comm[i]:comm[i].substr(1)).replace("{user}",context['display-name']).replace("{id}",context["username"]).replace("{channel}",target.substr(1)).split("@n");
               for(var i of out)
                 client.say(target,i);
               break;
